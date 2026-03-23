@@ -1,6 +1,15 @@
+from playwright.sync_api import sync_playwright
+
 print("Bot démarré")
 
-import time
-time.sleep(5)
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
+
+    page.goto("https://example.com")
+
+    print("Site ouvert")
+
+    browser.close()
 
 print("Bot terminé")
