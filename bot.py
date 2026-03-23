@@ -65,37 +65,36 @@ with sync_playwright() as p:
         print(f"Attente avant login : {wait_time:.2f} secondes")
         time.sleep(wait_time)
 
-        # 🧠 BONUS DEBUG
+        # 🧠 DEBUG boutons
         buttons = page.locator("button, input[type='submit']").all()
         print("Nombre de boutons trouvés :", len(buttons))
+
+        for i, btn in enumerate(buttons):
+            try:
+                print(f"Bouton {i} texte :", btn.inner_text())
+            except:
+                print(f"Bouton {i} sans texte")
 
         # 🖱️ Mouvement souris
         page.mouse.move(400, 400)
         human_delay(1,2)
 
-        # 🔥 ULTRA ROBUSTE LOGIN
-        login_selectors = [
-            "button[type='submit']",
-            "input[type='submit']",
-            "button:has-text('Login')",
-            "button:has-text('Sign in')",
-            "input[value='Login']"
-        ]
+        # 🔥 CLIC ULTRA ROBUSTE (JS)
+        clicked = page.evaluate("""
+        () => {
+            let btns = document.querySelectorAll('button, input[type="submit"]');
+            for (let btn of btns) {
+                let text = (btn.innerText || btn.value || "").toLowerCase();
+                if (text.includes("login") || text.includes("sign")) {
+                    btn.click();
+                    return "clicked";
+                }
+            }
+            return "not found";
+        }
+        """)
 
-        clicked = False
-
-        for selector in login_selectors:
-            try:
-                page.wait_for_selector(selector, timeout=5000)
-                page.click(selector)
-                print(f"✅ Bouton trouvé et cliqué : {selector}")
-                clicked = True
-                break
-            except:
-                continue
-
-        if not clicked:
-            print("❌ Aucun bouton login trouvé")
+        print("Résultat clic JS :", clicked)
 
         # ⏳ Attente après login
         human_delay(5,8)
