@@ -1,24 +1,15 @@
-name: Run Bot
+from playwright.sync_api import sync_playwright
 
-on:
-  workflow_dispatch:
+print("Bot démarré")
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
 
-    steps:
-      - uses: actions/checkout@v3
+    page.goto("https://tronpick.io", timeout=60000)
 
-      - name: Installer Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
+    print("Titre :", page.title())
 
-      - name: Installer Playwright
-        run: |
-          pip install playwright
-          python -m playwright install
+    browser.close()
 
-      - name: Lancer bot
-        run: python bot.py
+print("Bot terminé")
