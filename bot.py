@@ -3,12 +3,12 @@ import time
 import os
 from playwright.sync_api import sync_playwright
 
-print("Bot PRO démarré")
+print("Bot PRO MAX démarré")
 
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
 
-# 🔍 Vérification (évite erreur NoneType)
+# 🔍 Vérification
 if not EMAIL or not PASSWORD:
     print("Erreur : EMAIL ou PASSWORD manquant !")
     exit()
@@ -40,14 +40,13 @@ with sync_playwright() as p:
         print("URL :", page.url)
         print("Titre :", page.title())
 
-        # 🔍 Sélecteurs robustes
+        # 🔍 Sélecteurs champs
         email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
         password_selector = "input[type='password']"
 
-        # Attendre champ email
         page.wait_for_selector(email_selector, timeout=60000)
 
-        # ✍️ Taper email comme humain
+        # ✍️ Email
         page.click(email_selector)
         for c in EMAIL:
             page.keyboard.type(c)
@@ -55,50 +54,50 @@ with sync_playwright() as p:
 
         human_delay(1,3)
 
-        # ✍️ Taper password
+        # ✍️ Password
         page.click(password_selector)
         for c in PASSWORD:
             page.keyboard.type(c)
             time.sleep(random.uniform(0.05, 0.15))
 
-        # ⏳ 🔥 Attente 5 à 10 secondes avant login
+        # ⏳ Attente humaine 5 à 10s
         wait_time = random.uniform(5, 10)
         print(f"Attente avant login : {wait_time:.2f} secondes")
         time.sleep(wait_time)
+
+        # 🧠 BONUS DEBUG
+        buttons = page.locator("button, input[type='submit']").all()
+        print("Nombre de boutons trouvés :", len(buttons))
 
         # 🖱️ Mouvement souris
         page.mouse.move(400, 400)
         human_delay(1,2)
 
-buttons = page.locator("button, input[type='submit']").all()
-print("Nombre de boutons trouvés :", len(buttons))
+        # 🔥 ULTRA ROBUSTE LOGIN
+        login_selectors = [
+            "button[type='submit']",
+            "input[type='submit']",
+            "button:has-text('Login')",
+            "button:has-text('Sign in')",
+            "input[value='Login']"
+        ]
 
-        # 🔘 Cliquer login
-        # 🔘 Essayer plusieurs types de bouton login
-login_selectors = [
-    "button[type='submit']",
-    "input[type='submit']",
-    "button:has-text('Login')",
-    "button:has-text('Sign in')",
-    "input[value='Login']"
-]
+        clicked = False
 
-clicked = False
+        for selector in login_selectors:
+            try:
+                page.wait_for_selector(selector, timeout=5000)
+                page.click(selector)
+                print(f"✅ Bouton trouvé et cliqué : {selector}")
+                clicked = True
+                break
+            except:
+                continue
 
-for selector in login_selectors:
-    try:
-        page.wait_for_selector(selector, timeout=5000)
-        page.click(selector)
-        print(f"Bouton trouvé et cliqué : {selector}")
-        clicked = True
-        break
-    except:
-        continue
+        if not clicked:
+            print("❌ Aucun bouton login trouvé")
 
-if not clicked:
-    print("❌ Aucun bouton login trouvé")
-
-        # ⏳ Attendre réponse
+        # ⏳ Attente après login
         human_delay(5,8)
 
         print("Après login URL :", page.url)
