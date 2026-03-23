@@ -79,15 +79,20 @@ with sync_playwright() as p:
         page.mouse.move(400, 400)
         human_delay(1,2)
 
-        # 🔥 CLIC ULTRA ROBUSTE (JS)
+        # 🔥 CLIC ULTRA ROBUSTE (corrigé log in)
         clicked = page.evaluate("""
         () => {
             let btns = document.querySelectorAll('button, input[type="submit"]');
             for (let btn of btns) {
-                let text = (btn.innerText || btn.value || "").toLowerCase();
-                if (text.includes("login") || text.includes("sign")) {
+                let text = (btn.innerText || btn.value || "").toLowerCase().trim();
+
+                if (
+                    text.includes("login") ||
+                    text.includes("log in") ||
+                    text.includes("sign in")
+                ) {
                     btn.click();
-                    return "clicked";
+                    return "clicked: " + text;
                 }
             }
             return "not found";
