@@ -8,6 +8,11 @@ print("Bot PRO démarré")
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
 
+# 🔍 Vérification (évite erreur NoneType)
+if not EMAIL or not PASSWORD:
+    print("Erreur : EMAIL ou PASSWORD manquant !")
+    exit()
+
 def human_delay(a=1, b=3):
     time.sleep(random.uniform(a, b))
 
@@ -26,10 +31,9 @@ with sync_playwright() as p:
     page = context.new_page()
 
     try:
-        # 🔥 Aller directement sur login.php
+        # 🔥 Aller sur login.php
         page.goto("https://tronpick.io/login.php", timeout=60000)
 
-        # Attendre chargement
         page.wait_for_load_state("domcontentloaded")
         human_delay(3,5)
 
@@ -40,26 +44,29 @@ with sync_playwright() as p:
         email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
         password_selector = "input[type='password']"
 
-        # Attendre les champs
+        # Attendre champ email
         page.wait_for_selector(email_selector, timeout=60000)
 
-        # ✍️ Remplissage humain
+        # ✍️ Taper email comme humain
         page.click(email_selector)
         for c in EMAIL:
             page.keyboard.type(c)
             time.sleep(random.uniform(0.05, 0.15))
 
-        human_delay()
+        human_delay(1,3)
 
+        # ✍️ Taper password
         page.click(password_selector)
         for c in PASSWORD:
             page.keyboard.type(c)
             time.sleep(random.uniform(0.05, 0.15))
 
-        # ⏳ Attendre avant clic (comme humain)
-        human_delay(3,6)
+        # ⏳ 🔥 Attente 5 à 10 secondes avant login
+        wait_time = random.uniform(5, 10)
+        print(f"Attente avant login : {wait_time:.2f} secondes")
+        time.sleep(wait_time)
 
-        # 🖱️ Petit mouvement souris
+        # 🖱️ Mouvement souris
         page.mouse.move(400, 400)
         human_delay(1,2)
 
