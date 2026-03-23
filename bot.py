@@ -8,7 +8,6 @@ print("Bot PRO MAX démarré")
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
 
-# 🔍 Vérification
 if not EMAIL or not PASSWORD:
     print("Erreur : EMAIL ou PASSWORD manquant !")
     exit()
@@ -31,16 +30,19 @@ with sync_playwright() as p:
     page = context.new_page()
 
     try:
-        # 🔥 Aller sur login.php
+        # 🔄 Aller sur login
         page.goto("https://tronpick.io/login.php", timeout=60000)
-
         page.wait_for_load_state("domcontentloaded")
         human_delay(3,5)
 
         print("URL :", page.url)
         print("Titre :", page.title())
 
-        # 🔍 Sélecteurs champs
+        # 🔄 Refresh page (important)
+        page.reload()
+        human_delay(3,5)
+
+        # 🔍 Champs
         email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
         password_selector = "input[type='password']"
 
@@ -60,9 +62,9 @@ with sync_playwright() as p:
             page.keyboard.type(c)
             time.sleep(random.uniform(0.05, 0.15))
 
-        # ⏳ Attente humaine 5 à 10s
+        # ⏳ Attente humaine
         wait_time = random.uniform(5, 10)
-        print(f"Attente avant login : {wait_time:.2f} secondes")
+        print(f"Attente avant actions : {wait_time:.2f} secondes")
         time.sleep(wait_time)
 
         # 🧠 DEBUG boutons
@@ -79,8 +81,28 @@ with sync_playwright() as p:
         page.mouse.move(400, 400)
         human_delay(1,2)
 
-        # 🔥 CLIC ULTRA ROBUSTE (corrigé log in)
-        clicked = page.evaluate("""
+        # 🔥 1. CLIQUER VERIFY (Cloudflare)
+        verify_clicked = page.evaluate("""
+        () => {
+            let btns = document.querySelectorAll('button');
+            for (let btn of btns) {
+                let text = (btn.innerText || "").toLowerCase();
+                if (text.includes("verify")) {
+                    btn.click();
+                    return "verify clicked";
+                }
+            }
+            return "no verify";
+        }
+        """)
+
+        print("Résultat Verify :", verify_clicked)
+
+        # ⏳ attendre après verify
+        time.sleep(5)
+
+        # 🔥 2. CLIQUER LOGIN
+        login_clicked = page.evaluate("""
         () => {
             let btns = document.querySelectorAll('button, input[type="submit"]');
             for (let btn of btns) {
@@ -92,14 +114,14 @@ with sync_playwright() as p:
                     text.includes("sign in")
                 ) {
                     btn.click();
-                    return "clicked: " + text;
+                    return "login clicked: " + text;
                 }
             }
-            return "not found";
+            return "login not found";
         }
         """)
 
-        print("Résultat clic JS :", clicked)
+        print("Résultat login :", login_clicked)
 
         # ⏳ Attente après login
         human_delay(5,8)
