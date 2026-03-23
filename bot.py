@@ -6,9 +6,17 @@ with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
 
-    page.goto("https://example.com")
+    try:
+        page.goto("https://tronpick.io", timeout=60000)
 
-    print("Site ouvert")
+        print("Titre :", page.title())
+        print("URL actuelle :", page.url)
+
+        content = page.content()
+        print("Longueur page :", len(content))
+
+    except Exception as e:
+        print("Erreur :", e)
 
     browser.close()
 
