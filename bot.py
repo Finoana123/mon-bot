@@ -1,7 +1,7 @@
 import random
 import time
 import os
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 print("Bot PRO MAX démarré")
 
@@ -102,7 +102,8 @@ with sync_playwright() as p:
         # ⏳ attendre après verify
         time.sleep(5)
 
-        # 🔥 2. CLIQUER LOGIN (garde votre logique)
+        # 🔥 2. CLIQUER LOGIN (garde votre logique) mais attendre navigation
+        # On récupère le résultat du clic, puis on attend la navigation vers une URL différente
         login_clicked = page.evaluate("""
         () => {
             let btns = document.querySelectorAll('button, input[type="submit"]');
@@ -114,20 +115,42 @@ with sync_playwright() as p:
                     text.includes("log in") ||
                     text.includes("sign in")
                 ) {
-                    btn.click();
-                    return "login clicked: " + text;
+                    try {
+                        btn.click();
+                        return "login clicked: " + text;
+                    } catch (e) {
+                        return "login click error: " + e.toString();
+                    }
                 }
             }
             return "login not found";
         }
         """)
 
-        print("Résultat login :", login_clicked)
+        print("Résultat login (évaluation) :", login_clicked)
 
-        # ⏳ Attente après login
-        human_delay(5,8)
+        # Attendre la navigation après le clic de login (timeout raisonnable)
+        navigated = False
+        try:
+            # on attend que l'URL change ou que la page se charge
+            page.wait_for_url("**/*", timeout=10000)  # courte attente pour changement d'URL
+            # si l'URL est différente de login.php, on considère que la navigation a eu lieu
+            if "login.php" not in page.url:
+                navigated = True
+        except PlaywrightTimeoutError:
+            navigated = False
 
-        print("Après login URL :", page.url)
+        # Si pas navigué, on attend un peu plus et vérifie un élément qui indique qu'on est connecté
+        if not navigated:
+            human_delay(2,4)
+            # tentative supplémentaire : attendre un élément spécifique de la page d'accueil/faucet
+            try:
+                page.wait_for_selector("a[href*='faucet.php'], #faucet, .faucet", timeout=8000)
+                navigated = True
+            except PlaywrightTimeoutError:
+                navigated = False
+
+        print("Navigation après login détectée :", navigated, "URL actuelle :", page.url)
 
         # ---------------------------
         # 🔧 CLIC PAR TEXTE : cliquer le bouton dont le texte exact est "1"
@@ -160,6 +183,17 @@ with sync_playwright() as p:
         """, "1")
 
         print("Résultat du clic par texte :", click_by_text_result)
+
+        # ---------------------------
+        # Si on n'est toujours pas sur faucet.php, tenter d'y aller directement (fallback)
+        if "faucet.php" not in page.url:
+            print("Faucet non atteint automatiquement. Tentative d'accès direct à /faucet.php ...")
+            try:
+                page.goto("https://tronpick.io/faucet.php", timeout=20000)
+                page.wait_for_load_state("domcontentloaded")
+                print("Après goto faucet URL :", page.url)
+            except Exception as e:
+                print("Impossible d'ouvrir faucet.php directement :", e)
 
     except Exception as e:
         print("Erreur :", e)
