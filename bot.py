@@ -1,105 +1,133 @@
-import os
-import sys
-import time
 import random
-import traceback
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+import time
+import os
+from playwright.sync_api import sync_playwright
 
-# ---------------------------
-# Configuration
-# ---------------------------
-EMAIL = os.getenv("EMAIL")
-PASSWORD = os.getenv("PASSWORD")
-PROXY_SERVER = "http://84.8.134.235:8888"  # proxy fourni
-HEADLESS = False  # mettre True en production
-SLOW_MO = 50      # ms, utile pour debug visuel
-STORAGE_FILE = "storageState.json"  # optionnel pour sauvegarder session
+print("Bot PRO MAX démarré")
 
-# ---------------------------
-# Utilitaires
-# ---------------------------
+# Email et mot de passe codés en dur (remplacent l'utilisation des variables d'environnement)
+EMAIL = "rivoniainafinoana123@gmail.com"
+PASSWORD = "Finoana123."
+
 def human_delay(a=1, b=3):
     time.sleep(random.uniform(a, b))
 
-def ensure_env_vars():
-    if not EMAIL or not PASSWORD:
-        print("Erreur : EMAIL ou PASSWORD manquant !")
-        sys.exit(1)
+with sync_playwright() as p:
+    browser = p.chromium.launch(
+        headless=True,
+        args=["--disable-blink-features=AutomationControlled"]
+    )
 
-# ---------------------------
-# Script principal
-# ---------------------------
-def main():
-    ensure_env_vars()
+    context = browser.new_context(
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        viewport={"width": 1280, "height": 720},
+        locale="fr-FR"
+    )
+
+    page = context.new_page()
 
     try:
-        with sync_playwright() as p:
-            # 1) Lancer le navigateur avec proxy (essayer d'abord avec proxy)
-            browser = None
+        # 🔄 Aller sur login
+        page.goto("https://tronpick.io/login.php", timeout=60000)
+        page.wait_for_load_state("domcontentloaded")
+        human_delay(3,5)
+
+        print("URL :", page.url)
+        print("Titre :", page.title())
+
+        # 🔄 Refresh page (important)
+        page.reload()
+        human_delay(3,5)
+
+        # 🔍 Champs
+        email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
+        password_selector = "input[type='password']"
+
+        page.wait_for_selector(email_selector, timeout=60000)
+
+        # ✍️ Email
+        page.click(email_selector)
+        for c in EMAIL:
+            page.keyboard.type(c)
+            time.sleep(random.uniform(0.05, 0.15))
+
+        human_delay(1,3)
+
+        # ✍️ Password
+        page.click(password_selector)
+        for c in PASSWORD:
+            page.keyboard.type(c)
+            time.sleep(random.uniform(0.05, 0.15))
+
+        # ⏳ Attente humaine
+        wait_time = random.uniform(5, 10)
+        print(f"Attente avant actions : {wait_time:.2f} secondes")
+        time.sleep(wait_time)
+
+        # 🧠 DEBUG boutons
+        buttons = page.locator("button, input[type='submit']").all()
+        print("Nombre de boutons trouvés :", len(buttons))
+
+        for i, btn in enumerate(buttons):
             try:
-                print("[playwright] lancement du navigateur avec proxy:", PROXY_SERVER)
-                browser = p.chromium.launch(
-                    headless=HEADLESS,
-                    slow_mo=SLOW_MO,
-                    proxy={"server": PROXY_SERVER},
-                    args=["--disable-blink-features=AutomationControlled"]
-                )
-            except Exception as e:
-                print("[playwright] échec lancement avec proxy:", e)
-                print("[playwright] tentative de lancement sans proxy en secours...")
-                browser = p.chromium.launch(headless=HEADLESS, slow_mo=SLOW_MO, args=["--disable-blink-features=AutomationControlled"])
+                print(f"Bouton {i} texte :", btn.inner_text())
+            except:
+                print(f"Bouton {i} sans texte")
 
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-                viewport={"width": 1280, "height": 720},
-                locale="fr-FR"
-            )
+        # 🖱️ Mouvement souris
+        page.mouse.move(400, 400)
+        human_delay(1,2)
 
-            page = context.new_page()
+        # 🔥 1. CLIQUER VERIFY (Cloudflare)
+        verify_clicked = page.evaluate("""
+        () => {
+            let btns = document.querySelectorAll('button');
+            for (let btn of btns) {
+                let text = (btn.innerText || "").toLowerCase();
+                if (text.includes("verify")) {
+                    btn.click();
+                    return "verify clicked";
+                }
+            }
+            return "no verify";
+        }
+        """)
 
-            try:
-                # 2) Test proxy via Playwright (si le navigateur a été lancé avec proxy)
-                try:
-                    print("[test] tentative d'accès direct au proxy via Playwright:", PROXY_SERVER)
-                    page.goto(PROXY_SERVER, timeout=15000)
-                    page.wait_for_load_state("domcontentloaded", timeout=10000)
-                    print("[test] proxy accessible via Playwright, URL atteinte:", page.url)
-                    try:
-                        snippet = page.locator("body").inner_text()[:200]
-                        print("[test] extrait body (début):", snippet)
-                    except Exception:
-                        print("[test] impossible de lire body du test proxy.")
-                except Exception as e:
-                    print("[test] échec test proxy via Playwright (peut être normal si proxy ne sert pas de page web):", e)
-                    # on continue
+        print("Résultat Verify :", verify_clicked)
 
-                # 3) Aller sur la page de login
-                print("[flow] navigation vers https://tronpick.io/login.php")
-                page.goto("https://tronpick.io/login.php", timeout=60000)
-                page.wait_for_load_state("domcontentloaded")
-                human_delay(2,4)
-                print("[flow] URL :", page.url)
-                print("[flow] Titre :", page.title())
+        # ⏳ attendre après verify
+        time.sleep(5)
 
-                # 4) Refresh (comme dans votre logique)
-                page.reload()
-                human_delay(2,4)
+        # 🔥 2. CLIQUER LOGIN
+        login_clicked = page.evaluate("""
+        () => {
+            let btns = document.querySelectorAll('button, input[type="submit"]');
+            for (let btn of btns) {
+                let text = (btn.innerText || btn.value || "").toLowerCase().trim();
 
-                # 5) Remplir email/password
-                email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
-                password_selector = "input[type='password']"
-                page.wait_for_selector(email_selector, timeout=60000)
+                if (
+                    text.includes("login") ||
+                    text.includes("log in") ||
+                    text.includes("sign in")
+                ) {
+                    btn.click();
+                    return "login clicked: " + text;
+                }
+            }
+            return "login not found";
+        }
+        """)
 
-                page.click(email_selector)
-                for c in EMAIL:
-                    page.keyboard.type(c)
-                    time.sleep(random.uniform(0.05, 0.12))
-                human_delay(0.5,1.5)
+        print("Résultat login :", login_clicked)
 
-                page.click(password_selector)
-                for c in PASSWORD:
-                    page.keyboard.type(c)
-                    time.sleep(random.uniform(0.05, 0.12))
+        # ⏳ Attente après login
+        human_delay(5,8)
 
-                # 6) Attente humaine aléatoire
-                wait_time = random.uniform(5, 10)
+        print("Après login URL :", page.url)
+
+    except Exception as e:
+        print("Erreur :", e)
+
+    browser.close()
+
+print("Bot terminé")
