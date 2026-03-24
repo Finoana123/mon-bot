@@ -67,21 +67,22 @@ with sync_playwright() as p:
         print(f"Attente avant actions : {wait_time:.2f} secondes")
         time.sleep(wait_time)
 
-        # 🧠 DEBUG boutons
+        # 🧠 DEBUG boutons (affichage pour humain, numérotation à partir de 1)
         buttons = page.locator("button, input[type='submit']").all()
         print("Nombre de boutons trouvés :", len(buttons))
 
         for i, btn in enumerate(buttons):
             try:
-                print(f"Bouton {i} texte :", btn.inner_text())
+                text = btn.inner_text().strip()
+                print(f"Bouton {i+1} texte : {text}")
             except:
-                print(f"Bouton {i} sans texte")
+                print(f"Bouton {i+1} sans texte")
 
         # 🖱️ Mouvement souris
         page.mouse.move(400, 400)
         human_delay(1,2)
 
-        # 🔥 1. CLIQUER VERIFY (Cloudflare)
+        # 🔥 1. CLIQUER VERIFY (Cloudflare) — garde votre logique
         verify_clicked = page.evaluate("""
         () => {
             let btns = document.querySelectorAll('button');
@@ -101,7 +102,7 @@ with sync_playwright() as p:
         # ⏳ attendre après verify
         time.sleep(5)
 
-        # 🔥 2. CLIQUER LOGIN
+        # 🔥 2. CLIQUER LOGIN (garde votre logique)
         login_clicked = page.evaluate("""
         () => {
             let btns = document.querySelectorAll('button, input[type="submit"]');
@@ -127,6 +128,30 @@ with sync_playwright() as p:
         human_delay(5,8)
 
         print("Après login URL :", page.url)
+
+        # ---------------------------
+        # 🔧 CLIC CIBLÉ : cliquer le bouton "1" (numérotation humaine)
+        # Définissez ici le numéro humain du bouton que vous voulez cliquer (1 = premier bouton)
+        human_choice = 1
+        target_index = human_choice - 1  # conversion en index 0-based
+
+        click_result = page.evaluate(
+            """(idx) => {
+                const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                if (idx < 0 || idx >= btns.length) {
+                    return 'index out of range: ' + idx;
+                }
+                try {
+                    btns[idx].click();
+                    return 'clicked index: ' + idx;
+                } catch (e) {
+                    return 'click error: ' + e.toString();
+                }
+            }""",
+            target_index
+        )
+
+        print("Résultat du clic ciblé :", click_result)
 
     except Exception as e:
         print("Erreur :", e)
