@@ -1,165 +1,256 @@
-import random
-import time
 import os
-from playwright.sync_api import sync_playwright
+import sys
+import time
+import random
+import traceback
+import requests
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-print("Bot PRO MAX démarré")
-
+# ---------------------------
+# Configuration
+# ---------------------------
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
+PROXY_SERVER = "http://84.8.134.235:8888"  # proxy fourni
+HEADLESS = False  # mettre True en production
+SLOW_MO = 50      # ms, utile pour debug visuel
+STORAGE_FILE = "storageState.json"  # optionnel pour sauvegarder session
 
-if not EMAIL or not PASSWORD:
-    print("Erreur : EMAIL ou PASSWORD manquant !")
-    exit()
-
+# ---------------------------
+# Utilitaires
+# ---------------------------
 def human_delay(a=1, b=3):
     time.sleep(random.uniform(a, b))
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(
-        headless=True,
-        args=["--disable-blink-features=AutomationControlled"]
-    )
+def test_proxy_http(proxy_url, test_url=None, timeout=8):
+    if test_url is None:
+        test_url = proxy_url
+    try:
+        print(f"[proxy test] GET {test_url} via {proxy_url}")
+        r = requests.get(test_url, timeout=timeout)
+        print("[proxy test] status:", r.status_code)
+        return True
+    except Exception as e:
+        print("[proxy test] échec:", repr(e))
+        return False
 
-    context = browser.new_context(
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-        viewport={"width": 1280, "height": 720},
-        locale="fr-FR"
-    )
+def ensure_env_vars():
+    if not EMAIL or not PASSWORD:
+        print("Erreur : EMAIL ou PASSWORD manquant !")
+        sys.exit(1)
 
-    page = context.new_page()
+# ---------------------------
+# Script principal
+# ---------------------------
+def main():
+    ensure_env_vars()
+
+    # 1) Test proxy simple via requests pour détecter connectivité
+    proxy_ok = test_proxy_http(PROXY_SERVER)
+    if not proxy_ok:
+        print("Attention : test proxy échoué. Le runner peut ne pas atteindre le proxy.")
+        # On continue quand même pour tenter d'exécuter Playwright (selon votre besoin)
+        # sys.exit(1)
 
     try:
-        # 🔄 Aller sur login
-        page.goto("https://tronpick.io/login.php", timeout=60000)
-        page.wait_for_load_state("domcontentloaded")
-        human_delay(3,5)
-
-        print("URL :", page.url)
-        print("Titre :", page.title())
-
-        # 🔄 Refresh page (important)
-        page.reload()
-        human_delay(3,5)
-
-        # 🔍 Champs
-        email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
-        password_selector = "input[type='password']"
-
-        page.wait_for_selector(email_selector, timeout=60000)
-
-        # ✍️ Email
-        page.click(email_selector)
-        for c in EMAIL:
-            page.keyboard.type(c)
-            time.sleep(random.uniform(0.05, 0.15))
-
-        human_delay(1,3)
-
-        # ✍️ Password
-        page.click(password_selector)
-        for c in PASSWORD:
-            page.keyboard.type(c)
-            time.sleep(random.uniform(0.05, 0.15))
-
-        # ⏳ Attente humaine
-        wait_time = random.uniform(5, 10)
-        print(f"Attente avant actions : {wait_time:.2f} secondes")
-        time.sleep(wait_time)
-
-        # 🧠 DEBUG boutons
-        buttons = page.locator("button, input[type='submit']").all()
-        print("Nombre de boutons trouvés :", len(buttons))
-
-        for i, btn in enumerate(buttons):
+        with sync_playwright() as p:
+            # 2) Lancer le navigateur avec proxy
             try:
-                print(f"Bouton {i} texte :", btn.inner_text())
-            except:
-                print(f"Bouton {i} sans texte")
+                print("[playwright] lancement du navigateur avec proxy:", PROXY_SERVER)
+                browser = p.chromium.launch(
+                    headless=HEADLESS,
+                    slow_mo=SLOW_MO,
+                    proxy={"server": PROXY_SERVER},
+                    args=["--disable-blink-features=AutomationControlled"]
+                )
+            except Exception as e:
+                print("[playwright] échec lancement avec proxy:", e)
+                print("[playwright] tentative de lancement sans proxy en secours...")
+                browser = p.chromium.launch(headless=HEADLESS, slow_mo=SLOW_MO, args=["--disable-blink-features=AutomationControlled"])
 
-        # 🖱️ Mouvement souris
-        page.mouse.move(400, 400)
-        human_delay(1,2)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+                viewport={"width": 1280, "height": 720},
+                locale="fr-FR"
+            )
 
-        # 🔥 1. CLIQUER VERIFY (Cloudflare)
-        verify_clicked = page.evaluate("""
-        () => {
-            let btns = document.querySelectorAll('button');
-            for (let btn of btns) {
-                let text = (btn.innerText || "").toLowerCase();
-                if (text.includes("verify")) {
-                    btn.click();
-                    return "verify clicked";
-                }
-            }
-            return "no verify";
-        }
-        """)
+            page = context.new_page()
 
-        print("Résultat Verify :", verify_clicked)
+            try:
+                # 3) Test rapide d'accès au proxy via Playwright (page fournie)
+                try:
+                    print("[test] tentative d'accès direct au proxy via Playwright:", PROXY_SERVER)
+                    page.goto(PROXY_SERVER, timeout=15000)
+                    page.wait_for_load_state("domcontentloaded", timeout=10000)
+                    print("[test] proxy accessible via Playwright, URL atteinte:", page.url)
+                    try:
+                        snippet = page.locator("body").inner_text()[:200]
+                        print("[test] extrait body (début):", snippet)
+                    except Exception:
+                        print("[test] impossible de lire body du test proxy.")
+                except Exception as e:
+                    print("[test] échec test proxy via Playwright:", e)
+                    # on continue
 
-        # ⏳ attendre après verify
-        time.sleep(5)
+                # 4) Aller sur la page de login
+                print("[flow] navigation vers https://tronpick.io/login.php")
+                page.goto("https://tronpick.io/login.php", timeout=60000)
+                page.wait_for_load_state("domcontentloaded")
+                human_delay(2,4)
+                print("[flow] URL :", page.url)
+                print("[flow] Titre :", page.title())
 
+                # 5) Refresh (comme dans votre logique)
+                page.reload()
+                human_delay(2,4)
 
-         # 🔧 CLIC CIBLÉ PAR POSITION : cliquer le bouton numéro 2 (numérotation humaine)
-        # human_choice = 2 signifie "deuxième bouton visible" -> index 1 en 0-based
-        human_choice = 2
-        target_index = human_choice - 1
+                # 6) Remplir email/password
+                email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
+                password_selector = "input[type='password']"
+                page.wait_for_selector(email_selector, timeout=60000)
 
-        click_by_index_result = page.evaluate(
-            """(idx) => {
-                const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-                if (idx < 0 || idx >= btns.length) {
-                    return 'index out of range: ' + idx;
-                }
-                // Ne pas cliquer les boutons contenant "verify" (sécurité)
-                const t = (btns[idx].innerText || btns[idx].value || '').toLowerCase().trim();
-                if (t.includes('verify')) {
-                    return 'target is verify, skipping click on index: ' + idx;
-                }
-                try {
-                    btns[idx].click();
-                    return 'clicked index: ' + idx + ' text: ' + (btns[idx].innerText || btns[idx].value || '');
-                } catch (e) {
-                    return 'click error: ' + e.toString();
-                }
-            }""",
-            target_index
-        )
+                page.click(email_selector)
+                for c in EMAIL:
+                    page.keyboard.type(c)
+                    time.sleep(random.uniform(0.05, 0.12))
+                human_delay(0.5,1.5)
 
-        print("Résultat du clic par index :", click_by_index_result)
+                page.click(password_selector)
+                for c in PASSWORD:
+                    page.keyboard.type(c)
+                    time.sleep(random.uniform(0.05, 0.12))
 
-        # 🔥 2. CLIQUER LOGIN
-        login_clicked = page.evaluate("""
-        () => {
-            let btns = document.querySelectorAll('button, input[type="submit"]');
-            for (let btn of btns) {
-                let text = (btn.innerText || btn.value || "").toLowerCase().trim();
+                # 7) Attente humaine aléatoire
+                wait_time = random.uniform(5, 10)
+                print(f"[flow] attente avant actions : {wait_time:.2f} secondes")
+                time.sleep(wait_time)
 
-                if (
-                    text.includes("login") ||
-                    text.includes("log in") ||
-                    text.includes("sign in")
-                ) {
-                    btn.click();
-                    return "login clicked: " + text;
-                }
-            }
-            return "login not found";
-        }
-        """)
+                # 8) Lister boutons pour debug
+                buttons = page.locator("button, input[type='submit']")
+                try:
+                    count = buttons.count()
+                except Exception:
+                    count = 0
+                print("[debug] Nombre de boutons trouvés :", count)
+                for i in range(count):
+                    try:
+                        txt = buttons.nth(i).inner_text().strip()
+                        print(f"[debug] Bouton {i+1} texte : {txt}")
+                    except Exception:
+                        try:
+                            val = buttons.nth(i).get_attribute("value") or ""
+                            print(f"[debug] Bouton {i+1} value : {val}")
+                        except Exception:
+                            print(f"[debug] Bouton {i+1} sans texte")
 
-        print("Résultat login :", login_clicked)
+                # 9) Cliquer le bouton numéro 2 (numérotation humaine -> index 1)
+                target_idx = 1
+                if target_idx < count:
+                    try:
+                        t = (buttons.nth(target_idx).inner_text() or buttons.nth(target_idx).get_attribute("value") or "").lower().strip()
+                    except Exception:
+                        t = ""
+                    if "verify" in t:
+                        print("[action] le bouton cible contient 'verify' — on ne clique pas dessus.")
+                    else:
+                        print(f"[action] clic sur bouton numéro {target_idx+1} (index {target_idx}) texte/value: {t}")
+                        try:
+                            buttons.nth(target_idx).click()
+                        except Exception as e:
+                            print("[action] erreur lors du clic par locator:", e)
+                else:
+                    print("[action] index cible hors plage des boutons trouvés.")
 
-        # ⏳ Attente après login
-        human_delay(5,8)
+                human_delay(1,2)
 
-        print("Après login URL :", page.url)
+                # 10) Cliquer login et attendre exactement 7 secondes après le clic
+                # Recherche du bouton login par texte (cas-insensible)
+                login_locator = page.locator("button, input[type='submit']").filter(has_text="Log in")
+                if login_locator.count() == 0:
+                    login_locator = page.locator("button, input[type='submit']").filter(has_text="login")
+                if login_locator.count() > 0:
+                    print("[action] tentative de clic sur login via locator...")
+                    try:
+                        login_locator.nth(0).click()
+                        print("[action] login cliqué, attente fixe de 7 secondes...")
+                        time.sleep(7)
+                    except Exception as e:
+                        print("[action] erreur lors du clic login via locator:", e)
+                        print("[action] tentative via JS evaluate...")
+                        res = page.evaluate("""
+                            () => {
+                                const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                                for (let b of btns) {
+                                    const t = (b.innerText || b.value || '').toLowerCase();
+                                    if (t.includes('login') || t.includes('log in') || t.includes('sign in')) {
+                                        try { b.click(); return 'clicked via js'; } catch(e) { return 'click error: ' + e.toString(); }
+                                    }
+                                }
+                                return 'login not found';
+                            }
+                        """)
+                        print("[action] résultat evaluate login :", res)
+                        print("[action] attente fixe de 7 secondes après evaluate...")
+                        time.sleep(7)
+                else:
+                    print("[action] bouton login non trouvé par locator, tentative via JS evaluate...")
+                    res = page.evaluate("""
+                        () => {
+                            const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                            for (let b of btns) {
+                                const t = (b.innerText || b.value || '').toLowerCase();
+                                if (t.includes('login') || t.includes('log in') || t.includes('sign in')) {
+                                    try { b.click(); return 'clicked via js'; } catch(e) { return 'click error: ' + e.toString(); }
+                                }
+                            }
+                            return 'login not found';
+                        }
+                    """)
+                    print("[action] résultat evaluate login :", res)
+                    print("[action] attente fixe de 7 secondes après evaluate...")
+                    time.sleep(7)
+
+                # 11) Vérifier URL / session
+                try:
+                    current_url = page.url
+                except Exception:
+                    current_url = "inconnue"
+                print("[flow] URL actuelle après login :", current_url)
+
+                # 12) Si pas sur faucet.php, tenter d'y aller directement
+                if "faucet.php" not in current_url:
+                    print("[fallback] tentative d'accès direct à /faucet.php ...")
+                    try:
+                        page.goto("https://tronpick.io/faucet.php", timeout=20000)
+                        page.wait_for_load_state("domcontentloaded", timeout=15000)
+                        print("[fallback] Après goto faucet URL :", page.url)
+                    except Exception as e:
+                        print("[fallback] impossible d'ouvrir faucet.php directement :", e)
+
+                # 13) Si connexion détectée, sauvegarder storageState (optionnel)
+                if "login.php" not in current_url:
+                    try:
+                        print("[session] connexion détectée, sauvegarde storageState dans", STORAGE_FILE)
+                        context.storage_state(path=STORAGE_FILE)
+                    except Exception as e:
+                        print("[session] impossible de sauvegarder storageState:", e)
+
+            except Exception as inner_e:
+                print("[flow] exception interne:")
+                traceback.print_exc()
+                raise inner_e
+            finally:
+                try:
+                    context.close()
+                except Exception:
+                    pass
+                browser.close()
 
     except Exception as e:
-        print("Erreur :", e)
+        print("[erreur globale] exception attrapée:")
+        traceback.print_exc()
+        # sortir avec code d'erreur pour CI
+        sys.exit(1)
 
-    browser.close()
-
-print("Bot terminé")
+if __name__ == "__main__":
+    main()
