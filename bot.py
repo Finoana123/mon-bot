@@ -130,28 +130,36 @@ with sync_playwright() as p:
         print("Après login URL :", page.url)
 
         # ---------------------------
-        # 🔧 CLIC CIBLÉ : cliquer le bouton "1" (numérotation humaine)
-        # Définissez ici le numéro humain du bouton que vous voulez cliquer (1 = premier bouton)
-        human_choice = 1
-        target_index = human_choice - 1  # conversion en index 0-based
-
-        click_result = page.evaluate(
-            """(idx) => {
-                const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-                if (idx < 0 || idx >= btns.length) {
-                    return 'index out of range: ' + idx;
+        # 🔧 CLIC PAR TEXTE : cliquer le bouton dont le texte exact est "1"
+        click_by_text_result = page.evaluate("""
+        (targetText) => {
+            const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+            // Cherche un bouton dont le texte exact (ou la value) est targetText
+            for (let i = 0; i < btns.length; i++) {
+                const t = (btns[i].innerText || btns[i].value || '').trim();
+                if (t === targetText) {
+                    try {
+                        btns[i].click();
+                        return 'clicked by text: ' + targetText + ' at index ' + i;
+                    } catch (e) {
+                        return 'click error on text match: ' + e.toString();
+                    }
                 }
+            }
+            // Si pas trouvé, fallback : clique le premier bouton (index 0)
+            if (btns.length > 0) {
                 try {
-                    btns[idx].click();
-                    return 'clicked index: ' + idx;
+                    btns[0].click();
+                    return 'text not found, fallback clicked index 0';
                 } catch (e) {
-                    return 'click error: ' + e.toString();
+                    return 'text not found, fallback click error: ' + e.toString();
                 }
-            }""",
-            target_index
-        )
+            }
+            return 'no buttons found';
+        }
+        """, "1")
 
-        print("Résultat du clic ciblé :", click_result)
+        print("Résultat du clic par texte :", click_by_text_result)
 
     except Exception as e:
         print("Erreur :", e)
