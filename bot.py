@@ -3,8 +3,6 @@ import time
 import os
 from playwright.sync_api import sync_playwright
 
-print("Bot HUMAIN PRO démarré")
-
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
 
@@ -12,13 +10,10 @@ def human_delay(a=1, b=3):
     time.sleep(random.uniform(a, b))
 
 with sync_playwright() as p:
-
+    # 🚀 Lancer navigateur en mode visible
     browser = p.chromium.launch(
-        headless=True,
-        args=[
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox"
-        ]
+        headless=False,  # 👀 important pour Cloudflare
+        args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
     )
 
     context = browser.new_context(
@@ -30,75 +25,49 @@ with sync_playwright() as p:
     page = context.new_page()
 
     try:
-        # 🌐 Ouvrir site
+        # 🌐 Ouvrir la page de login
         page.goto("https://tronpick.io/login.php", timeout=60000)
         page.wait_for_load_state("domcontentloaded")
+        print("Page login chargée")
 
-        print("Page chargée")
-
-        # 👀 comportement humain
+        # 👀 Attendre challenge Cloudflare
+        page.wait_for_load_state("networkidle")
         human_delay(5, 10)
-        page.mouse.move(random.randint(100,500), random.randint(100,500))
-        page.mouse.wheel(0, random.randint(300,800))
-        human_delay(2,5)
 
-        # 🔄 reload naturel
-        if random.random() > 0.5:
-            page.reload()
-            human_delay(3,6)
-
-        # 🔥 cliquer VERIFY (Cloudflare)
-        page.evaluate("""
-        () => {
-            let btns = document.querySelectorAll('button');
-            for (let b of btns) {
-                let t = (b.innerText || "").toLowerCase();
-                if (t.includes("verify")) {
-                    b.click();
-                }
-            }
-        }
-        """)
-
-        print("Verify tenté")
-        human_delay(5,8)
-
-        # 📩 remplir email
+        # 📩 remplir email et mot de passe
         page.fill("input[type='email']", EMAIL)
         human_delay()
-
-        # 🔒 password
         page.fill("input[type='password']", PASSWORD)
         human_delay()
 
-        # 🧠 pause humaine
-        time.sleep(random.uniform(5,10))
-
-        # 🔐 login
-        page.evaluate("""
-        () => {
-            let btns = document.querySelectorAll('button, input[type="submit"]');
-            for (let b of btns) {
-                let t = (b.innerText || b.value || "").toLowerCase();
-                if (t.includes("log in") || t.includes("login")) {
-                    b.click();
-                }
-            }
-        }
-        """)
-
-        print("Login tenté")
-        human_delay(5,10)
+        # 🔐 cliquer login
+        page.click("button:has-text('Login'), input[type='submit']")
+        human_delay(5, 10)
 
         # 🚀 aller faucet
         page.goto("https://tronpick.io/faucet.php")
-        human_delay(5,8)
-
+        page.wait_for_load_state("networkidle")
         print("URL finale :", page.url)
+
+        # 📋 Vérifier cookies
+        cookies = context.cookies()
+        for c in cookies:
+            print(c["name"], ":", c["value"])
+
+        # 💾 Sauvegarder état (cookies + storage)
+        context.storage_state(path="state.json")
+        print("État sauvegardé dans state.json")
 
     except Exception as e:
         print("Erreur :", e)
 
     browser.close()
 
-print("Bot terminé")
+# 🔄 Réutiliser le cookie cf_clearance
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    new_context = browser.new_context(storage_state="state.json")
+    new_page = new_context.new_page()
+    new_page.goto("https://tronpick.io/faucet.php")
+    print("Accès faucet avec cookies réutilisés :", new_page.url)
+    browser.close()
