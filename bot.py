@@ -82,28 +82,39 @@ with sync_playwright() as p:
         page.mouse.move(400, 400)
         human_delay(1,2)
 
-        # 🔥 1. CLIQUER VERIFY (Cloudflare) — garde votre logique
-        verify_clicked = page.evaluate("""
-        () => {
-            let btns = document.querySelectorAll('button');
-            for (let btn of btns) {
-                let text = (btn.innerText || "").toLowerCase();
-                if (text.includes("verify")) {
-                    btn.click();
-                    return "verify clicked";
+        # ---------------------------
+        # 🔧 CLIC CIBLÉ PAR POSITION : cliquer le bouton numéro 2 (numérotation humaine)
+        # human_choice = 2 signifie "deuxième bouton visible" -> index 1 en 0-based
+        human_choice = 2
+        target_index = human_choice - 1
+
+        click_by_index_result = page.evaluate(
+            """(idx) => {
+                const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                if (idx < 0 || idx >= btns.length) {
+                    return 'index out of range: ' + idx;
                 }
-            }
-            return "no verify";
-        }
-        """)
+                // Ne pas cliquer les boutons contenant "verify" (sécurité)
+                const t = (btns[idx].innerText || btns[idx].value || '').toLowerCase().trim();
+                if (t.includes('verify')) {
+                    return 'target is verify, skipping click on index: ' + idx;
+                }
+                try {
+                    btns[idx].click();
+                    return 'clicked index: ' + idx + ' text: ' + (btns[idx].innerText || btns[idx].value || '');
+                } catch (e) {
+                    return 'click error: ' + e.toString();
+                }
+            }""",
+            target_index
+        )
 
-        print("Résultat Verify :", verify_clicked)
+        print("Résultat du clic par index :", click_by_index_result)
 
-        # ⏳ attendre après verify
-        time.sleep(5)
+        # ⏳ Petite attente après ce clic ciblé
+        human_delay(1,2)
 
-        # 🔥 2. CLIQUER LOGIN (garde votre logique) mais attendre navigation
-        # On récupère le résultat du clic, puis on attend la navigation vers une URL différente
+        # 🔥 CLIQUER LOGIN (garde votre logique) et ATTENDRE 7 secondes après le clic
         login_clicked = page.evaluate("""
         () => {
             let btns = document.querySelectorAll('button, input[type="submit"]');
@@ -129,60 +140,19 @@ with sync_playwright() as p:
 
         print("Résultat login (évaluation) :", login_clicked)
 
-        # Attendre la navigation après le clic de login (timeout raisonnable)
+        # Attendre exactement 7 secondes après le clic login
+        print("Attente fixe de 7 secondes après le clic login...")
+        time.sleep(7)
+
+        # Vérifier si l'URL a changé ou si on est connecté
         navigated = False
         try:
-            # on attend que l'URL change ou que la page se charge
-            page.wait_for_url("**/*", timeout=10000)  # courte attente pour changement d'URL
-            # si l'URL est différente de login.php, on considère que la navigation a eu lieu
             if "login.php" not in page.url:
                 navigated = True
-        except PlaywrightTimeoutError:
+        except Exception:
             navigated = False
 
-        # Si pas navigué, on attend un peu plus et vérifie un élément qui indique qu'on est connecté
-        if not navigated:
-            human_delay(2,4)
-            # tentative supplémentaire : attendre un élément spécifique de la page d'accueil/faucet
-            try:
-                page.wait_for_selector("a[href*='faucet.php'], #faucet, .faucet", timeout=8000)
-                navigated = True
-            except PlaywrightTimeoutError:
-                navigated = False
-
         print("Navigation après login détectée :", navigated, "URL actuelle :", page.url)
-
-        # ---------------------------
-        # 🔧 CLIC PAR TEXTE : cliquer le bouton dont le texte exact est "1"
-        click_by_text_result = page.evaluate("""
-        (targetText) => {
-            const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-            // Cherche un bouton dont le texte exact (ou la value) est targetText
-            for (let i = 0; i < btns.length; i++) {
-                const t = (btns[i].innerText || btns[i].value || '').trim();
-                if (t === targetText) {
-                    try {
-                        btns[i].click();
-                        return 'clicked by text: ' + targetText + ' at index ' + i;
-                    } catch (e) {
-                        return 'click error on text match: ' + e.toString();
-                    }
-                }
-            }
-            // Si pas trouvé, fallback : clique le premier bouton (index 0)
-            if (btns.length > 0) {
-                try {
-                    btns[0].click();
-                    return 'text not found, fallback clicked index 0';
-                } catch (e) {
-                    return 'text not found, fallback click error: ' + e.toString();
-                }
-            }
-            return 'no buttons found';
-        }
-        """, "1")
-
-        print("Résultat du clic par texte :", click_by_text_result)
 
         # ---------------------------
         # Si on n'est toujours pas sur faucet.php, tenter d'y aller directement (fallback)
