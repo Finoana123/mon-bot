@@ -5,26 +5,29 @@ from playwright.sync_api import sync_playwright
 
 print("Bot PRO MAX démarré")
 
-# Email et mot de passe codés en dur (remplacent l'utilisation des variables d'environnement)
+# Email et mot de passe codés en dur
 EMAIL = "rivoniainafinoana123@gmail.com"
 PASSWORD = "Finoana123."
+
+# Dossier de profil local (changez si besoin)
+USER_DATA_DIR = os.path.expanduser("~/playwright_profile")
 
 def human_delay(a=1, b=3):
     time.sleep(random.uniform(a, b))
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(
-        headless=True,
-        args=["--disable-blink-features=AutomationControlled"]
-    )
-
-    context = browser.new_context(
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    # Utiliser launch_persistent_context pour ouvrir un navigateur "local" avec profil
+    # headless=False pour voir la fenêtre locale
+    browser_context = p.chromium.launch_persistent_context(
+        user_data_dir=USER_DATA_DIR,
+        headless=False,  # visible : utile pour utiliser le navigateur local
+        args=["--disable-blink-features=AutomationControlled"],
         viewport={"width": 1280, "height": 720},
-        locale="fr-FR"
+        locale="fr-FR",
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
     )
 
-    page = context.new_page()
+    page = browser_context.new_page()
 
     try:
         # 🔄 Aller sur login
@@ -45,7 +48,7 @@ with sync_playwright() as p:
 
         page.wait_for_selector(email_selector, timeout=60000)
 
-        # ✍️ Email
+        # ✍️ Email (écriture humaine simulée)
         page.click(email_selector)
         for c in EMAIL:
             page.keyboard.type(c)
@@ -65,20 +68,29 @@ with sync_playwright() as p:
         time.sleep(wait_time)
 
         # 🧠 DEBUG boutons
-        buttons = page.locator("button, input[type='submit']").all()
-        print("Nombre de boutons trouvés :", len(buttons))
+        buttons = page.locator("button, input[type='submit']")
+        try:
+            count = buttons.count()
+        except Exception:
+            count = 0
+        print("Nombre de boutons trouvés :", count)
 
-        for i, btn in enumerate(buttons):
+        for i in range(count):
             try:
-                print(f"Bouton {i} texte :", btn.inner_text())
-            except:
-                print(f"Bouton {i} sans texte")
+                txt = buttons.nth(i).inner_text().strip()
+                print(f"Bouton {i+1} texte : {txt}")
+            except Exception:
+                try:
+                    val = buttons.nth(i).get_attribute("value") or ""
+                    print(f"Bouton {i+1} value : {val}")
+                except Exception:
+                    print(f"Bouton {i+1} sans texte")
 
         # 🖱️ Mouvement souris
         page.mouse.move(400, 400)
         human_delay(1,2)
 
-        # 🔥 1. CLIQUER VERIFY (Cloudflare)
+        # 🔥 1. CLIQUER VERIFY (Cloudflare) — garde votre logique
         verify_clicked = page.evaluate("""
         () => {
             let btns = document.querySelectorAll('button');
@@ -110,8 +122,12 @@ with sync_playwright() as p:
                     text.includes("log in") ||
                     text.includes("sign in")
                 ) {
-                    btn.click();
-                    return "login clicked: " + text;
+                    try {
+                        btn.click();
+                        return "login clicked: " + text;
+                    } catch (e) {
+                        return "login click error: " + e.toString();
+                    }
                 }
             }
             return "login not found";
@@ -120,14 +136,26 @@ with sync_playwright() as p:
 
         print("Résultat login :", login_clicked)
 
-        # ⏳ Attente après login
-        human_delay(5,8)
+        # ⏳ Attente après login (fixe)
+        print("Attente fixe de 7 secondes après le clic login...")
+        time.sleep(7)
 
         print("Après login URL :", page.url)
+
+        # Si vous voulez sauvegarder l'état de la session (cookies/localStorage) pour réutiliser plus tard :
+        try:
+            storage_path = os.path.join(USER_DATA_DIR, "storageState.json")
+            browser_context.storage_state(path=storage_path)
+            print("Storage state sauvegardé dans :", storage_path)
+        except Exception as e:
+            print("Impossible de sauvegarder storage state :", e)
 
     except Exception as e:
         print("Erreur :", e)
 
-    browser.close()
+    finally:
+        # Ne pas fermer le navigateur automatiquement si vous voulez l'utiliser localement après le script.
+        # Si vous voulez qu'il reste ouvert pour inspection, commentez la ligne suivante.
+        browser_context.close()
 
 print("Bot terminé")
