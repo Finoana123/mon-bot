@@ -3,171 +3,124 @@ import time
 import os
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-print("Bot PRO MAX démarré")
-
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
-
-if not EMAIL or not PASSWORD:
-    print("Erreur : EMAIL ou PASSWORD manquant !")
-    exit()
+USE_STORED_SESSION = False  # True pour réutiliser storageState.json
+STORAGE_FILE = "storageState.json"
 
 def human_delay(a=1, b=3):
     time.sleep(random.uniform(a, b))
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(
-        headless=True,
-        args=["--disable-blink-features=AutomationControlled"]
-    )
+    # Mode visible pour debug ; en production vous pouvez repasser headless=True
+    browser = p.chromium.launch(headless=False, slow_mo=100)
 
-    context = browser.new_context(
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-        viewport={"width": 1280, "height": 720},
-        locale="fr-FR"
-    )
+    context_args = {
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        "viewport": {"width": 1280, "height": 720},
+        "locale": "fr-FR",
+        # "proxy": {"server": "http://user:pass@proxy:port"}  # décommentez si vous utilisez un proxy
+    }
+
+    if USE_STORED_SESSION and os.path.exists(STORAGE_FILE):
+        context = browser.new_context(storage_state=STORAGE_FILE, **context_args)
+    else:
+        context = browser.new_context(**context_args)
 
     page = context.new_page()
 
     try:
-        # 🔄 Aller sur login
         page.goto("https://tronpick.io/login.php", timeout=60000)
         page.wait_for_load_state("domcontentloaded")
-        human_delay(3,5)
+        human_delay(2,4)
 
         print("URL :", page.url)
         print("Titre :", page.title())
 
-        # 🔄 Refresh page (important)
-        page.reload()
-        human_delay(3,5)
+        # Remplir email/password si pas de session stockée
+        if not (USE_STORED_SESSION and os.path.exists(STORAGE_FILE)):
+            email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
+            password_selector = "input[type='password']"
+            page.wait_for_selector(email_selector, timeout=60000)
+            page.click(email_selector)
+            for c in EMAIL:
+                page.keyboard.type(c)
+                time.sleep(random.uniform(0.05, 0.12))
+            human_delay(0.5,1.5)
+            page.click(password_selector)
+            for c in PASSWORD:
+                page.keyboard.type(c)
+                time.sleep(random.uniform(0.05, 0.12))
+            human_delay(1,2)
 
-        # 🔍 Champs
-        email_selector = "input[type='email'], input[name='email'], input[placeholder*='mail']"
-        password_selector = "input[type='password']"
-
-        page.wait_for_selector(email_selector, timeout=60000)
-
-        # ✍️ Email
-        page.click(email_selector)
-        for c in EMAIL:
-            page.keyboard.type(c)
-            time.sleep(random.uniform(0.05, 0.15))
-
-        human_delay(1,3)
-
-        # ✍️ Password
-        page.click(password_selector)
-        for c in PASSWORD:
-            page.keyboard.type(c)
-            time.sleep(random.uniform(0.05, 0.15))
-
-        # ⏳ Attente humaine
-        wait_time = random.uniform(5, 10)
-        print(f"Attente avant actions : {wait_time:.2f} secondes")
-        time.sleep(wait_time)
-
-        # 🧠 DEBUG boutons (affichage pour humain, numérotation à partir de 1)
-        buttons = page.locator("button, input[type='submit']").all()
-        print("Nombre de boutons trouvés :", len(buttons))
-
-        for i, btn in enumerate(buttons):
+        # Debug : lister boutons
+        buttons = page.locator("button, input[type='submit']")
+        count = buttons.count()
+        print("Nombre de boutons trouvés :", count)
+        for i in range(count):
             try:
-                text = btn.inner_text().strip()
-                print(f"Bouton {i+1} texte : {text}")
+                print(f"Bouton {i+1} texte :", buttons.nth(i).inner_text().strip())
             except:
                 print(f"Bouton {i+1} sans texte")
 
-        # 🖱️ Mouvement souris
-        page.mouse.move(400, 400)
-        human_delay(1,2)
+        # Cliquer le bouton numéro 2 (index 1) en s'assurant que ce n'est pas "verify"
+        target_idx = 1
+        if target_idx < count:
+            text = (buttons.nth(target_idx).inner_text() or buttons.nth(target_idx).get_attribute("value") or "").lower().strip()
+            if "verify" in text:
+                print("Le bouton cible contient 'verify' — on n'exécute pas le clic.")
+            else:
+                print(f"Clique sur le bouton index {target_idx} texte: {text}")
+                buttons.nth(target_idx).click()
+                human_delay(1,2)
+        else:
+            print("Index cible hors plage des boutons")
 
-        # ---------------------------
-        # 🔧 CLIC CIBLÉ PAR POSITION : cliquer le bouton numéro 2 (numérotation humaine)
-        # human_choice = 2 signifie "deuxième bouton visible" -> index 1 en 0-based
-        human_choice = 2
-        target_index = human_choice - 1
-
-        click_by_index_result = page.evaluate(
-            """(idx) => {
-                const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-                if (idx < 0 || idx >= btns.length) {
-                    return 'index out of range: ' + idx;
-                }
-                // Ne pas cliquer les boutons contenant "verify" (sécurité)
-                const t = (btns[idx].innerText || btns[idx].value || '').toLowerCase().trim();
-                if (t.includes('verify')) {
-                    return 'target is verify, skipping click on index: ' + idx;
-                }
-                try {
-                    btns[idx].click();
-                    return 'clicked index: ' + idx + ' text: ' + (btns[idx].innerText || btns[idx].value || '');
-                } catch (e) {
-                    return 'click error: ' + e.toString();
-                }
-            }""",
-            target_index
-        )
-
-        print("Résultat du clic par index :", click_by_index_result)
-
-        # ⏳ Petite attente après ce clic ciblé
-        human_delay(1,2)
-
-        # 🔥 CLIQUER LOGIN (garde votre logique) et ATTENDRE 7 secondes après le clic
-        login_clicked = page.evaluate("""
-        () => {
-            let btns = document.querySelectorAll('button, input[type="submit"]');
-            for (let btn of btns) {
-                let text = (btn.innerText || btn.value || "").toLowerCase().trim();
-
-                if (
-                    text.includes("login") ||
-                    text.includes("log in") ||
-                    text.includes("sign in")
-                ) {
-                    try {
-                        btn.click();
-                        return "login clicked: " + text;
-                    } catch (e) {
-                        return "login click error: " + e.toString();
+        # Cliquer login et attendre navigation correctement
+        # On utilise locator pour trouver le bouton login précisément
+        login_locator = page.locator("button, input[type='submit']").filter(has_text="Log in")
+        if login_locator.count() == 0:
+            # fallback : chercher par texte partiel
+            login_locator = page.locator("button, input[type='submit']").filter(has_text="login")
+        if login_locator.count() > 0:
+            print("Tentative de clic sur login...")
+            with page.expect_navigation(timeout=20000, wait_until="networkidle"):
+                login_locator.nth(0).click()
+            human_delay(7,7)  # attente fixe de 7s demandée
+        else:
+            print("Bouton login non trouvé par locator; tentative d'évaluation JS")
+            page.evaluate("""
+                () => {
+                    const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                    for (let b of btns) {
+                        const t = (b.innerText || b.value || '').toLowerCase();
+                        if (t.includes('login') || t.includes('log in') || t.includes('sign in')) {
+                            b.click();
+                            return true;
+                        }
                     }
+                    return false;
                 }
-            }
-            return "login not found";
-        }
-        """)
+            """)
+            human_delay(7,7)
 
-        print("Résultat login (évaluation) :", login_clicked)
+        print("URL après tentative login :", page.url)
 
-        # Attendre exactement 7 secondes après le clic login
-        print("Attente fixe de 7 secondes après le clic login...")
-        time.sleep(7)
+        # Si connexion réussie, sauvegarder storageState pour réutiliser la session
+        if "login.php" not in page.url and not USE_STORED_SESSION:
+            print("Connexion détectée — sauvegarde de la session dans", STORAGE_FILE)
+            context.storage_state(path=STORAGE_FILE)
 
-        # Vérifier si l'URL a changé ou si on est connecté
-        navigated = False
-        try:
-            if "login.php" not in page.url:
-                navigated = True
-        except Exception:
-            navigated = False
-
-        print("Navigation après login détectée :", navigated, "URL actuelle :", page.url)
-
-        # ---------------------------
-        # Si on n'est toujours pas sur faucet.php, tenter d'y aller directement (fallback)
+        # Si toujours sur login, tenter d'ouvrir faucet (mais si site exige session, cela retournera login)
         if "faucet.php" not in page.url:
-            print("Faucet non atteint automatiquement. Tentative d'accès direct à /faucet.php ...")
-            try:
-                page.goto("https://tronpick.io/faucet.php", timeout=20000)
-                page.wait_for_load_state("domcontentloaded")
-                print("Après goto faucet URL :", page.url)
-            except Exception as e:
-                print("Impossible d'ouvrir faucet.php directement :", e)
+            print("Tentative d'accès direct à /faucet.php ...")
+            page.goto("https://tronpick.io/faucet.php", timeout=20000)
+            page.wait_for_load_state("domcontentloaded")
+            print("Après goto faucet URL :", page.url)
 
+        # Fin des actions
     except Exception as e:
         print("Erreur :", e)
-
-    browser.close()
-
-print("Bot terminé")
+    finally:
+        context.close()
+        browser.close()
