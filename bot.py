@@ -101,6 +101,35 @@ with sync_playwright() as p:
         # ⏳ attendre après verify
         time.sleep(5)
 
+
+         # 🔧 CLIC CIBLÉ PAR POSITION : cliquer le bouton numéro 2 (numérotation humaine)
+        # human_choice = 2 signifie "deuxième bouton visible" -> index 1 en 0-based
+        human_choice = 2
+        target_index = human_choice - 1
+
+        click_by_index_result = page.evaluate(
+            """(idx) => {
+                const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                if (idx < 0 || idx >= btns.length) {
+                    return 'index out of range: ' + idx;
+                }
+                // Ne pas cliquer les boutons contenant "verify" (sécurité)
+                const t = (btns[idx].innerText || btns[idx].value || '').toLowerCase().trim();
+                if (t.includes('verify')) {
+                    return 'target is verify, skipping click on index: ' + idx;
+                }
+                try {
+                    btns[idx].click();
+                    return 'clicked index: ' + idx + ' text: ' + (btns[idx].innerText || btns[idx].value || '');
+                } catch (e) {
+                    return 'click error: ' + e.toString();
+                }
+            }""",
+            target_index
+        )
+
+        print("Résultat du clic par index :", click_by_index_result)
+
         # 🔥 2. CLIQUER LOGIN
         login_clicked = page.evaluate("""
         () => {
